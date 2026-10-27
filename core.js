@@ -1,0 +1,13 @@
+(function(root){
+'use strict';
+const median=a=>{const b=a.filter(Number.isFinite).sort((x,y)=>x-y);return b.length?(b[Math.floor((b.length-1)/2)]+b[Math.ceil((b.length-1)/2)])/2:null};
+const value=r=>r.type==='rent'?r.rent:r.amount;
+const pp=r=>value(r)/(r.area/3.305785);
+function monthList(end,n){const [y,m]=end.split('-').map(Number);return Array.from({length:n},(_,i)=>{const d=new Date(Date.UTC(y,m-n+i,1));return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`})}
+function filter(rows,s,mode=true){const months=monthList(s.end,s.period),start=months[0];return rows.filter(r=>(!mode||r.type===s.type)&&(!s.town||r.town===s.town)&&(!s.query||r.name.toLowerCase().includes(s.query.toLowerCase()))&&(s.area==='all'||(s.area==='standard'&&r.area>=84&&r.area<=85)||(s.area==='small'&&r.area<=60)||(s.area==='medium'&&r.area>60&&r.area<=85)||(s.area==='large'&&r.area>85))&&r.date.slice(0,7)>=start&&r.date.slice(0,7)<=s.end)}
+function series(rows,s){const filtered=filter(rows,s);const months=monthList(s.end,s.period);const groups=new Map(months.map(m=>[m,[]]));filtered.forEach(r=>groups.get(r.date.slice(0,7))?.push(r));let base=null;return months.map(month=>{const a=groups.get(month);const price=median(a.map(pp));if(base===null&&price!==null&&price>0)base=price;return {month,count:a.length,median:price,index:price!==null&&base?price/base*100:null}})}
+function ranking(rows,perPyeong=false){const map=new Map;for(const r of rows){const key=r.name+'|'+r.town+'|'+r.address;const old=map.get(key);if(!old||(perPyeong?pp(r)>pp(old):value(r)>value(old))||((perPyeong?pp(r)===pp(old):value(r)===value(old))&&r.date>old.date))map.set(key,r)}return [...map.values()].sort((a,b)=>(perPyeong?pp(b)-pp(a):value(b)-value(a))||b.date.localeCompare(a.date)).slice(0,10)}
+function regionSummary(rows){const map=new Map;for(const r of rows){if(!map.has(r.town))map.set(r.town,[]);map.get(r.town).push(r)}return [...map].map(([town,rr])=>({town,count:rr.length,pp:median(rr.map(pp)),amount:median(rr.map(value))})).sort((a,b)=>b.pp-a.pp)}
+function matchedLeaseRatio(rows){const groups=new Map;rows.filter(r=>r.type==='sale'||r.type==='lease').forEach(r=>{const key=[r.town,r.name,r.address,Math.round(r.area)].join('|');if(!groups.has(key))groups.set(key,{sale:[],lease:[]});groups.get(key)[r.type].push(r.amount)});const ratios=[];for(const g of groups.values())if(g.sale.length&&g.lease.length)ratios.push(median(g.lease)/median(g.sale)*100);return {ratio:median(ratios),matched:ratios.length}}
+const api={median,value,pp,monthList,filter,series,ranking,regionSummary,matchedLeaseRatio};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Market=api;
+})(typeof window!=='undefined'?window:globalThis);
